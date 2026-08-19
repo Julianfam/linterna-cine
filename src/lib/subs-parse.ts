@@ -161,3 +161,83 @@ export function pickCaptionFile(files: ArchiveFile[]): ArchiveFile | null {
     .sort((a, b) => b.score - a.score);
   return ranked[0]?.file ?? null;
 }
+
+export function wordsToCues(
+  words: { text: string; start: number; end: number }[],
+): Cue[] {
+  const cues: Cue[] = [];
+  let batch: { text: string; start: number; end: number }[] = [];
+
+  const flush = () => {
+    if (!batch.length) return;
+    const text = batch
+      .map((w) => w.text)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .replace(/\s+([,.;:!?])/g, "$1")
+      .trim();
+    if (text) {
+      const start = batch[0].start;
+      const end = Math.max(start + 0.7, batch[batch.length - 1].end);
+      cues.push({ start, end, text });
+    }
+    batch = [];
+  };
+
+  for (const word of words) {
+    const text = word.text.trim();
+    if (!text) continue;
+    if (!batch.length) {
+      batch = [{ ...word, text }];
+      continue;
+    }
+    const prev = batch[batch.length - 1];
+    const gap = word.start - prev.end;
+    const dur = word.end - batch[0].start;
+    const punct = /[.!?]$/.test(prev.text);
+    if (gap > 0.9 || dur > 4.5 || batch.length >= 14 || (punct && batch.length >= 5 && gap > 0.12)) {
+      flush();
+    }
+    batch.push({ ...word, text });
+  }
+  flush();
+  return cues;
+}
+
+export function scoreAudioFile(file: ArchiveFile): number {
+  const name = (file.name ?? "").toLowerCase();
+  const format = (file.format ?? "").toLowerCase();
+  const size = num(file.size);
+  if (!name || name.includes(".thumbs") || name.includes("__ia_thumb")) return -1;
+  if (/\.(zip|ffp|flac|cue|m3u)$/i.test(name)) return -1;
+  if (/(^|[-_])(lfe|ls|rs)(\.|$)|dvd-lfe|dvd-ls|dvd-rs|5\.1-dvd-[clr](\.|_)/i.test(name)) {
+    if (!/st-16|stereo|_st[-_.]/.test(name)) return -1;
+  }
+
+  const isMp3 = name.endsWith(".mp3") || format.includes("mp3");
+  const isOgg = name.endsWith(".ogg") || format.includes("vorbis");
+  const isM4a = name.endsWith(".m4a") || name.endsWith(".aac");
+  const isMp4 =
+    name.endsWith(".mp4") &&
+    (format.includes("mpeg4") || format.includes("h.264") || name.includes("512kb"));
+  if (!isMp3 && !isOgg && !isM4a && !isMp4) return -1;
+
+  let score = 8;
+  if (isMp3) score += 42;
+  if (format.includes("64kb") || name.includes("64kb")) score += 28;
+  if (/stereo|st-16|_st[-_.]/.test(name)) score += 18;
+  if (isOgg) score += 16;
+  if (isM4a) score += 14;
+  if (isMp4 && name.includes("512kb")) score += 10;
+  if (size > 800_000 && size < 90_000_000) score += 10;
+  if (size > 220_000_000) score -= 24;
+  return score;
+}
+
+export function pickAudioFile(files: ArchiveFile[]): ArchiveFile | null {
+  const ranked = files
+    .map((file) => ({ file, score: scoreAudioFile(file) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  return ranked[0]?.file ?? null;
+}

@@ -43,13 +43,16 @@ export function useGeneratedCaptions(film: Film, enabled: boolean) {
   const generate = async () => {
     if (!enabled || progress) return;
     setError(null);
-    setProgress({ phase: "search", done: 0, total: 0 });
+    setProgress({ phase: "audio", done: 0, total: 0 });
     try {
-      const result = await generateSpanishVtt(film.archiveId, setProgress);
+      const result = await generateSpanishVtt(
+        { archiveId: film.archiveId, filmId: film.id, runtime: film.runtime },
+        setProgress,
+      );
       await writeCachedVtt({
         filmId: film.id,
         vtt: result.vtt,
-        source: result.source,
+        source: "audio",
         fileName: result.fileName,
         cues: result.cues,
         createdAt: Date.now(),
@@ -59,11 +62,7 @@ export function useGeneratedCaptions(film: Film, enabled: boolean) {
       blobRef.current = next;
       setUrl(next);
       markGenerated(film.id);
-      toast(
-        result.source === "es"
-          ? "Subtítulos en español listos"
-          : `Subtítulos traducidos · ${result.cues} líneas`,
-      );
+      toast(`Subtítulos generados desde el audio · ${result.cues} líneas`);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "No se pudieron generar los subtítulos.";

@@ -45,8 +45,8 @@ function FilmPage() {
           : generated.ready || generated.known
             ? "Subtítulos en español listos — se activan al reproducir"
             : lang.audio === "silent" || lang.audio === "none"
-              ? "Sin diálogos — puedes buscar una pista de intertítulos"
-              : "Audio original · puedes generar subtítulos en español";
+              ? "Sin diálogos hablados — el generador escucha el audio y avisa si no hay texto"
+              : "Audio original · generamos subtítulos escuchando la pista";
 
   useEffect(() => {
     prefetchStream(playArchiveId(film, "es"), film.id);
@@ -143,7 +143,9 @@ function FilmPage() {
                     {generated.busy
                       ? generated.progress?.phase === "translate"
                         ? `Traduciendo ${generated.progress.done}/${generated.progress.total}`
-                        : "Buscando pista…"
+                        : generated.progress?.phase === "transcribe"
+                          ? `Transcribiendo ${generated.progress.done}/${generated.progress.total}`
+                          : "Escuchando el audio…"
                       : "Generar subtítulos ES"}
                   </Button>
                 )

@@ -311,9 +311,11 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
           <p className="text-xs text-muted tabular-nums">
             {film.year} · {film.director.split(",")[0]}
             {generated.progress
-              ? generated.progress.phase === "search"
-                ? " · Buscando subtítulos…"
-                : ` · Traduciendo ${generated.progress.done}/${generated.progress.total}`
+              ? generated.progress.phase === "translate"
+                ? ` · Traduciendo ${generated.progress.done}/${generated.progress.total}`
+                : generated.progress.phase === "transcribe"
+                  ? ` · Transcribiendo ${generated.progress.done}/${generated.progress.total}`
+                  : " · Escuchando el audio…"
               : null}
           </p>
         </div>
@@ -478,9 +480,11 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
 
           {generated.progress ? (
             <div className="absolute inset-x-0 bottom-0 z-10 bg-bg/80 px-4 py-3 text-center text-sm text-fg">
-              {generated.progress.phase === "search"
-                ? "Buscando una pista de subtítulos en el archivo…"
-                : `Traduciendo al español ${generated.progress.done} / ${generated.progress.total}`}
+              {generated.progress.phase === "translate"
+                ? `Traduciendo al español ${generated.progress.done} / ${generated.progress.total}`
+                : generated.progress.phase === "transcribe"
+                  ? `Transcribiendo el audio ${generated.progress.done} / ${generated.progress.total}`
+                  : "Escuchando la pista de audio…"}
             </div>
           ) : null}
         </div>

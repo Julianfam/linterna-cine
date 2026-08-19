@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { Bookmark, BookmarkCheck, Play, Tv } from "lucide-react";
+import { Bookmark, BookmarkCheck, Play, Tv, Subtitles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Meta } from "@/components/hero";
 import { MovieRow } from "@/components/movie-row";
@@ -10,9 +10,10 @@ import { SiteNav } from "@/components/nav";
 import { Button } from "@/components/ui/button";
 import { GENRES, LICENSE_LABEL, posterUrl, relatedFilms } from "@/lib/catalog";
 import { resolveFilm } from "@/lib/discover";
-import { langInfo, playArchiveId } from "@/lib/languages";
+import { langInfo, playArchiveId, canGenerateCaptions } from "@/lib/languages";
 import { prefetchStream } from "@/lib/archive";
 import { useLibrary } from "@/lib/library";
+import { useGeneratedCaptions } from "@/lib/use-captions";
 
 export const Route = createFileRoute("/pelicula/$slug")({
   loader: async ({ params }) => {
@@ -33,6 +34,7 @@ function FilmPage() {
   const related = relatedFilms(film);
   const resume = progress && progress.seconds > 8;
   const lang = langInfo(film);
+  const generated = useGeneratedCaptions(film, canGenerateCaptions(film));
   const spanishLine =
     lang.audio === "es"
       ? "Audio en español"
@@ -40,9 +42,11 @@ function FilmPage() {
         ? "Subtítulos en español (se activan solos)"
         : lang.captions === "es-burned"
           ? "Copia con subtítulos en español"
-          : lang.audio === "silent" || lang.audio === "none"
-            ? "Sin diálogos — se entiende sin traducción"
-            : "Audio original, sin subtítulos en español todavía";
+          : generated.ready || generated.known
+            ? "Subtítulos en español listos — se activan al reproducir"
+            : lang.audio === "silent" || lang.audio === "none"
+              ? "Sin diálogos — puedes buscar una pista de intertítulos"
+              : "Audio original · puedes generar subtítulos en español";
 
   useEffect(() => {
     prefetchStream(playArchiveId(film, "es"), film.id);
@@ -114,6 +118,35 @@ function FilmPage() {
                     Subtítulos ES
                   </Link>
                 </Button>
+              ) : null}
+              {canGenerateCaptions(film) && !lang.esArchiveId ? (
+                generated.ready || generated.known ? (
+                  <Button asChild size="lg" variant="outline">
+                    <Link to="/ver/$slug" params={{ slug: film.id }} search={{ pista: "es" }}>
+                      <Subtitles className="size-4" />
+                      Ver con subtítulos ES
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="lg"
+                    variant="outline"
+                    disabled={generated.busy}
+                    onClick={() => void generated.generate()}
+                  >
+                    {generated.busy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Subtitles className="size-4" />
+                    )}
+                    {generated.busy
+                      ? generated.progress?.phase === "translate"
+                        ? `Traduciendo ${generated.progress.done}/${generated.progress.total}`
+                        : "Buscando pista…"
+                      : "Generar subtítulos ES"}
+                  </Button>
+                )
               ) : null}
               <Button asChild size="lg" variant="outline">
                 <Link to="/tv">

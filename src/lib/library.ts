@@ -13,12 +13,14 @@ type LibraryState = {
   list: string[];
   progress: Record<string, Progress>;
   added: Record<string, Film>;
+  generatedSubs: Record<string, boolean>;
   toggleList: (slug: string) => void;
   inList: (slug: string) => boolean;
   addFilm: (film: Film) => void;
   removeAdded: (slug: string) => void;
   saveProgress: (entry: Omit<Progress, "updatedAt">) => void;
   clearProgress: (slug: string) => void;
+  markGenerated: (slug: string) => void;
   continueWatching: () => Progress[];
 };
 
@@ -28,6 +30,7 @@ export const useLibrary = create<LibraryState>()(
       list: [],
       progress: {},
       added: {},
+      generatedSubs: {},
       toggleList: (slug) =>
         set((s) => ({
           list: s.list.includes(slug) ? s.list.filter((id) => id !== slug) : [slug, ...s.list],
@@ -72,6 +75,10 @@ export const useLibrary = create<LibraryState>()(
           delete next[slug];
           return { progress: next };
         }),
+      markGenerated: (slug) =>
+        set((s) => ({
+          generatedSubs: { ...s.generatedSubs, [slug]: true },
+        })),
       continueWatching: () =>
         Object.values(get().progress)
           .filter((p) => p.duration > 0 && p.seconds / p.duration < 0.95 && p.seconds > 8)
@@ -87,6 +94,7 @@ export const useLibrary = create<LibraryState>()(
           list: p.list ?? current.list,
           progress: p.progress ?? current.progress,
           added: p.added ?? current.added,
+          generatedSubs: p.generatedSubs ?? current.generatedSubs,
         };
       },
     },

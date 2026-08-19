@@ -62,6 +62,10 @@ export function hasSpanish(film: Film) {
   return info.captions !== "none" || info.audio === "es";
 }
 
+export function canGenerateCaptions(film: Film) {
+  return !langInfo(film).subUrl;
+}
+
 export function playArchiveId(film: Film, pista: "es" | "original" = "es") {
   const info = langInfo(film);
   if (pista === "es" && info.esArchiveId) return info.esArchiveId;

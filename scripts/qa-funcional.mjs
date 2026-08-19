@@ -168,6 +168,27 @@ await test("tv-send-and-sala", async () => {
   await page.screenshot({ path: "/workspace/screenshots/qa-tv.png" });
 });
 
+await test("subtitle-generator", async () => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${base}/ver/his-girl-friday?pista=es`, { waitUntil: "domcontentloaded", timeout: 25000 });
+  await page.waitForTimeout(1400);
+  const generate = page.getByRole("button", { name: /Generar subtítulos/i });
+  assert(await generate.isVisible(), "no hay generador en un título sin subtítulos");
+  await page.goto(`${base}/pelicula/detour`, { waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.waitForTimeout(800);
+  const ficha = await page.locator("body").innerText();
+  assert(/generar subtítulos/i.test(ficha), "la ficha no ofrece el generador");
+  await page.goto(`${base}/ver/sintel?pista=es`, { waitUntil: "domcontentloaded", timeout: 25000 });
+  await page.waitForTimeout(1200);
+  assert(
+    (await page.getByRole("button", { name: /Generar subtítulos/i }).count()) === 0,
+    "Sintel no debe pedir generar: ya tiene subtítulos oficiales",
+  );
+  const official = page.getByRole("button", { name: /Ocultar subtítulos|Subtítulos en español/ });
+  assert((await official.count()) > 0, "Sintel debe mostrar el interruptor de subtítulos");
+  await page.screenshot({ path: "/workspace/screenshots/qa-subs.png" });
+});
+
 await browser.close();
 
 const failed = results.filter((r) => !r.ok);

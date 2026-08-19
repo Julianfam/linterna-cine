@@ -13,6 +13,7 @@ import {
   VolumeX,
   Subtitles,
   Tv,
+  Loader2,
 } from "lucide-react";
 import {
   devicePrefersMp4,
@@ -25,6 +26,7 @@ import {
 import { type Film } from "@/lib/catalog";
 import { langInfo } from "@/lib/languages";
 import { useLibrary } from "@/lib/library";
+import { useGeneratedCaptions } from "@/lib/use-captions";
 import { cn, formatClock } from "@/lib/utils";
 import { TvPanel } from "@/components/tv-panel";
 
@@ -35,7 +37,10 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
   const lang = langInfo(film);
   const useBurned = pista === "subs" && Boolean(lang.esArchiveId);
   const playId = useBurned ? (lang.esArchiveId as string) : film.archiveId;
-  const subUrl = useBurned ? undefined : lang.subUrl;
+  const officialSubUrl = useBurned ? undefined : lang.subUrl;
+  const canGenerate = !officialSubUrl && !useBurned;
+  const generated = useGeneratedCaptions(film, canGenerate);
+  const subUrl = officialSubUrl ?? generated.url ?? undefined;
   const [apple, setApple] = useState(false);
   const [stream, setStream] = useState<StreamInfo | null>(() =>
     useBurned ? knownArchiveStream(playId) : playbackStream(film.id, playId, false),
@@ -305,6 +310,11 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
           <p className="truncate font-display text-xl text-fg sm:text-2xl">{film.title}</p>
           <p className="text-xs text-muted tabular-nums">
             {film.year} · {film.director.split(",")[0]}
+            {generated.progress
+              ? generated.progress.phase === "search"
+                ? " · Buscando subtítulos…"
+                : ` · Traduciendo ${generated.progress.done}/${generated.progress.total}`
+              : null}
           </p>
         </div>
         {showUnmute ? (
@@ -321,6 +331,35 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
             <Volume2 className="size-4" />
             <span className="hidden sm:inline">{needsTap && !playing ? "Reproducir" : "Tocar para oír"}</span>
             <span className="sm:hidden">{needsTap && !playing ? "Play" : "Audio"}</span>
+          </button>
+        ) : null}
+        {canGenerate && !generated.ready ? (
+          <button
+            type="button"
+            aria-label="Generar subtítulos en español"
+            disabled={generated.busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              void generated.generate();
+            }}
+            className="inline-flex h-12 shrink-0 items-center gap-2 rounded-md bg-elevated px-3 text-sm font-medium text-fg ring-1 ring-border sm:px-4 disabled:opacity-70"
+          >
+            {generated.busy ? <Loader2 className="size-4 animate-spin" /> : <Subtitles className="size-4" />}
+            <span className="hidden sm:inline">{generated.busy ? "Generando…" : "Generar subtítulos ES"}</span>
+            <span className="sm:hidden">{generated.busy ? "…" : "Subs ES"}</span>
+          </button>
+        ) : null}
+        {apple && subUrl ? (
+          <button
+            type="button"
+            aria-label={subsOn ? "Ocultar subtítulos" : "Subtítulos en español"}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSubsOn((v) => !v);
+            }}
+            className="grid size-12 shrink-0 place-items-center rounded-md bg-elevated text-fg ring-1 ring-border"
+          >
+            <Subtitles className={subsOn ? "size-5" : "size-5 text-muted"} />
           </button>
         ) : null}
         <button
@@ -416,7 +455,14 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
               }}
             >
               {subUrl ? (
-                <track kind="subtitles" src={subUrl} srcLang="es" label="Español" default={subsOn} />
+                <track
+                  key={subUrl}
+                  kind="subtitles"
+                  src={subUrl}
+                  srcLang="es"
+                  label="Español"
+                  default={subsOn}
+                />
               ) : null}
             </video>
           ) : null}
@@ -427,6 +473,14 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
                 <div className="mx-auto size-10 animate-spin rounded-full border-2 border-border border-t-primary" />
                 <p className="mt-4 text-sm text-muted">Abriendo una copia ligera…</p>
               </div>
+            </div>
+          ) : null}
+
+          {generated.progress ? (
+            <div className="absolute inset-x-0 bottom-0 z-10 bg-bg/80 px-4 py-3 text-center text-sm text-fg">
+              {generated.progress.phase === "search"
+                ? "Buscando una pista de subtítulos en el archivo…"
+                : `Traduciendo al español ${generated.progress.done} / ${generated.progress.total}`}
             </div>
           ) : null}
         </div>

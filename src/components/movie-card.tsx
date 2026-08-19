@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Play } from "lucide-react";
 import { type Film } from "@/lib/catalog";
 import { spanishLabel } from "@/lib/languages";
+import { useLibrary } from "@/lib/library";
 import { Poster } from "@/components/poster";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +16,8 @@ export function MovieCard({
   layout?: "row" | "grid";
 }) {
   const pct = progress && progress > 0 && progress < 0.95 ? progress : 0;
-  const es = spanishLabel(film);
+  const generated = useLibrary((s) => Boolean(s.generatedSubs[film.id]));
+  const es = spanishLabel(film) ?? (generated ? "Sub ES" : null);
 
   return (
     <Link

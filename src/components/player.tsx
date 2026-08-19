@@ -21,12 +21,14 @@ import {
   playbackStream,
   resolveStream,
   resolveStreamClient,
+  warmupPlayback,
   type StreamInfo,
 } from "@/lib/archive";
 import { type Film } from "@/lib/catalog";
 import { langInfo } from "@/lib/languages";
 import { useLibrary } from "@/lib/library";
 import { useGeneratedCaptions } from "@/lib/use-captions";
+import { BUFFER_RESUME, BUFFER_STALL, bufferAhead, readBufferRanges, type BufferRange } from "@/lib/buffer";
 import { cn, formatClock } from "@/lib/utils";
 import { TvPanel } from "@/components/tv-panel";
 
@@ -52,7 +54,10 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
   const [volume, setVolume] = useState(1);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [buffered, setBuffered] = useState(0);
+  const [ranges, setRanges] = useState<BufferRange[]>([]);
+  const [ahead, setAhead] = useState(0);
+  const [hasFrame, setHasFrame] = useState(false);
+  const [stalled, setStalled] = useState(false);
   const [chrome, setChrome] = useState(true);
   const [filled, setFilled] = useState(false);
   const [useEmbed, setUseEmbed] = useState(false);
@@ -61,6 +66,11 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
   const [tvOpen, setTvOpen] = useState(false);
   const saveProgress = useLibrary((s) => s.saveProgress);
   const existing = useLibrary((s) => s.progress[film.id]);
+  const stallOwn = useRef(false);
+  const userPaused = useRef(false);
+  const resumeDone = useRef(false);
+  const existingRef = useRef(existing);
+  existingRef.current = existing;
 
   useLayoutEffect(() => {
     setApple(devicePrefersMp4());
@@ -77,9 +87,19 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
       setError(null);
       setUseEmbed(false);
       setLoading(true);
+      setHasFrame(false);
+      setStalled(false);
+      resumeDone.current = false;
+      userPaused.current = false;
+      stallOwn.current = false;
       return;
     }
     setLoading(true);
+    setHasFrame(false);
+    setStalled(false);
+    resumeDone.current = false;
+    userPaused.current = false;
+    stallOwn.current = false;
     setError(null);
     setStream(null);
     setUseEmbed(false);
@@ -107,6 +127,38 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
       cancelled = true;
     };
   }, [playId, film.id, useBurned, apple]);
+
+  useEffect(() => {
+    if (stream?.url) warmupPlayback(stream.url);
+  }, [stream?.url]);
+
+  useEffect(() => {
+    if (!stream || useEmbed) return;
+    const tick = () => {
+      const v = videoRef.current;
+      if (!v) return;
+      const next = readBufferRanges(v.buffered);
+      const nextAhead = bufferAhead(next, v.currentTime);
+      setRanges(next);
+      setAhead(nextAhead);
+
+      if (!hasFrame || userPaused.current || v.seeking || v.ended) return;
+      if (!v.paused && nextAhead < BUFFER_STALL) {
+        stallOwn.current = true;
+        v.pause();
+        setStalled(true);
+        return;
+      }
+      if (stallOwn.current && nextAhead >= BUFFER_RESUME) {
+        stallOwn.current = false;
+        setStalled(false);
+        void v.play().catch(() => undefined);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 400);
+    return () => window.clearInterval(id);
+  }, [stream, useEmbed, hasFrame]);
 
   useEffect(() => {
     if (!stream || useEmbed) return;
@@ -200,8 +252,17 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
-    if (v.paused) void startPlayback();
-    else v.pause();
+    if (v.paused) {
+      userPaused.current = false;
+      stallOwn.current = false;
+      setStalled(false);
+      void startPlayback();
+    } else {
+      userPaused.current = true;
+      stallOwn.current = false;
+      setStalled(false);
+      v.pause();
+    }
   };
 
   const startPlayback = async () => {
@@ -215,6 +276,28 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
       setNeedsTap(true);
       setLoading(false);
     }
+  };
+
+  const applyResumeIfNeeded = () => {
+    const v = videoRef.current;
+    if (!v || resumeDone.current) return false;
+    const resume = existingRef.current?.seconds ?? 0;
+    if (resume > 8 && Math.abs(v.currentTime - resume) > 2) {
+      resumeDone.current = true;
+      v.currentTime = resume;
+      return true;
+    }
+    resumeDone.current = true;
+    return false;
+  };
+
+  const onReadyToPlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    setDuration(v.duration || 0);
+    if (v.readyState >= 2) setLoading(false);
+    if (applyResumeIfNeeded()) return;
+    if (!userPaused.current && v.paused) void startPlayback();
   };
 
   const unmute = () => {
@@ -247,22 +330,20 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
     const v = videoRef.current;
     if (!v) return;
     setDuration(v.duration || 0);
-    setLoading(false);
-    if (existing && existing.seconds > 8 && existing.seconds < (v.duration || 0) - 10) {
-      v.currentTime = existing.seconds;
-    }
     if (apple) {
       v.muted = true;
       setMuted(true);
     }
-    void startPlayback();
+    onReadyToPlay();
   };
 
   const onTime = () => {
     const v = videoRef.current;
     if (!v) return;
     setCurrent(v.currentTime);
-    if (v.buffered.length) setBuffered(v.buffered.end(v.buffered.length - 1));
+    const next = readBufferRanges(v.buffered);
+    setRanges(next);
+    setAhead(bufferAhead(next, v.currentTime));
     if (Math.floor(v.currentTime) % 5 === 0) {
       saveProgress({ slug: film.id, seconds: v.currentTime, duration: v.duration || 0 });
     }
@@ -429,17 +510,33 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
               onPlay={() => {
                 setPlaying(true);
                 setNeedsTap(false);
+                if (!stallOwn.current) setStalled(false);
               }}
               onPause={() => {
                 setPlaying(false);
                 setChrome(true);
                 const v = videoRef.current;
-                if (v) saveProgress({ slug: film.id, seconds: v.currentTime, duration: v.duration || 0 });
+                if (v && !stallOwn.current) {
+                  saveProgress({ slug: film.id, seconds: v.currentTime, duration: v.duration || 0 });
+                }
               }}
               onLoadedMetadata={onLoaded}
+              onCanPlay={onReadyToPlay}
+              onSeeked={onReadyToPlay}
+              onProgress={onTime}
               onTimeUpdate={onTime}
-              onWaiting={() => setLoading(true)}
-              onPlaying={() => setLoading(false)}
+              onWaiting={() => {
+                if (!hasFrame) setLoading(true);
+                else setStalled(true);
+              }}
+              onPlaying={() => {
+                setHasFrame(true);
+                setLoading(false);
+                if (!stallOwn.current) setStalled(false);
+              }}
+              onStalled={() => {
+                if (hasFrame) setStalled(true);
+              }}
               onVolumeChange={() => {
                 const v = videoRef.current;
                 if (!v) return;
@@ -469,12 +566,18 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
             </video>
           ) : null}
 
-          {loading && !error && !useEmbed ? (
+          {loading && !hasFrame && !error && !useEmbed ? (
             <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center px-6">
               <div className="text-center">
                 <div className="mx-auto size-10 animate-spin rounded-full border-2 border-border border-t-primary" />
-                <p className="mt-4 text-sm text-muted">Abriendo una copia ligera…</p>
+                <p className="mt-4 text-sm text-muted">Arrancando los primeros segundos…</p>
               </div>
+            </div>
+          ) : null}
+
+          {stalled && hasFrame && !useEmbed ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-bg/75 px-4 py-2 text-center text-xs text-muted">
+              Llenando el buffer · {Math.max(0, Math.round(ahead))} s listos
             </div>
           ) : null}
 
@@ -514,7 +617,7 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
           )}
           style={{ opacity: showChrome ? 1 : 0, pointerEvents: showChrome ? "auto" : "none" }}
         >
-          <SeekBar current={current} duration={duration} buffered={buffered} onSeek={seek} />
+          <SeekBar current={current} duration={duration} ranges={ranges} onSeek={seek} />
           <div className="mt-3 flex items-center gap-1 sm:gap-2">
             <IconBtn label={playing ? "Pausa" : "Reproducir"} onClick={togglePlay}>
               {playing ? (
@@ -573,6 +676,9 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
             />
             <p className="ml-2 text-xs text-muted tabular-nums">
               {formatClock(current)} / {formatClock(duration)}
+              {ahead > 1 ? (
+                <span className="ml-2 text-subtle">· {Math.round(ahead)} s por delante</span>
+              ) : null}
             </p>
             {subUrl ? (
               <IconBtn
@@ -667,16 +773,15 @@ function IconBtn({
 function SeekBar({
   current,
   duration,
-  buffered,
+  ranges,
   onSeek,
 }: {
   current: number;
   duration: number;
-  buffered: number;
+  ranges: BufferRange[];
   onSeek: (ratio: number) => void;
 }) {
   const ratio = duration > 0 ? current / duration : 0;
-  const buf = duration > 0 ? buffered / duration : 0;
   return (
     <button
       type="button"
@@ -688,7 +793,16 @@ function SeekBar({
       }}
     >
       <span className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-elevated">
-        <span className="absolute inset-y-0 left-0 bg-subtle/50" style={{ width: `${buf * 100}%` }} />
+        {ranges.map((range) => (
+          <span
+            key={`${range.start}-${range.end}`}
+            className="absolute inset-y-0 bg-subtle/55"
+            style={{
+              left: `${duration > 0 ? (range.start / duration) * 100 : 0}%`,
+              width: `${duration > 0 ? ((range.end - range.start) / duration) * 100 : 0}%`,
+            }}
+          />
+        ))}
         <span className="absolute inset-y-0 left-0 bg-primary" style={{ width: `${ratio * 100}%` }} />
       </span>
     </button>

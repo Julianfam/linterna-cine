@@ -17,6 +17,7 @@ export function useGeneratedCaptions(film: Film, enabled: boolean) {
   const [progress, setProgress] = useState<GenerateProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const blobRef = useRef<string | null>(null);
+  const partialToast = useRef(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -44,10 +45,22 @@ export function useGeneratedCaptions(film: Film, enabled: boolean) {
     if (!enabled || progress) return;
     setError(null);
     setProgress({ phase: "audio", done: 0, total: 0 });
+    partialToast.current = false;
     try {
       const result = await generateSpanishVtt(
         { archiveId: film.archiveId, filmId: film.id, runtime: film.runtime },
         setProgress,
+        (vtt, cues) => {
+          if (blobRef.current) URL.revokeObjectURL(blobRef.current);
+          const next = vttToObjectUrl(vtt);
+          blobRef.current = next;
+          setUrl(next);
+          markGenerated(film.id);
+          if (cues > 0 && !partialToast.current) {
+            partialToast.current = true;
+            toast("Subtítulos en vivo · se siguen generando");
+          }
+        },
       );
       await writeCachedVtt({
         filmId: film.id,
@@ -62,7 +75,11 @@ export function useGeneratedCaptions(film: Film, enabled: boolean) {
       blobRef.current = next;
       setUrl(next);
       markGenerated(film.id);
-      toast(`Subtítulos generados desde el audio · ${result.cues} líneas`);
+      toast(
+        partialToast.current
+          ? `Buffer de subtítulos listo · ${result.cues} líneas`
+          : `Subtítulos generados desde el audio · ${result.cues} líneas`,
+      );
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "No se pudieron generar los subtítulos.";

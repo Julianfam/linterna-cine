@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Info, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { heroFilms, posterUrl, type Film } from "@/lib/catalog";
+import { devicePrefersMp4, playbackStream, warmupPlayback } from "@/lib/archive";
 import { formatRuntime } from "@/lib/utils";
 
 export function Hero() {
@@ -18,6 +19,13 @@ export function Hero() {
   }, [films.length]);
 
   const film = films[index] ?? films[0];
+
+  useEffect(() => {
+    if (!film) return;
+    const warm = playbackStream(film.id, film.archiveId, devicePrefersMp4());
+    if (warm?.url) warmupPlayback(warm.url);
+  }, [film]);
+
   if (!film) return null;
 
   return (

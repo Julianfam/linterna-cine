@@ -57,8 +57,7 @@ type ArchiveFile = { name?: string; format?: string; size?: string | number };
 const SEP = "\n¶\n";
 const DB_NAME = "linterna-subs-audio";
 const STORE = "vtt";
-const SLICE_SEC = 75;
-const ONESHOT_MAX = 16 * 60;
+const SLICE_SEC = 45;
 
 type AudioCache = {
   buf: Uint8Array;
@@ -228,7 +227,7 @@ export const prepareAudioSource = createServerFn({ method: "POST" })
     await xaiKey();
     const source = await findAudioSource(data.archiveId);
     const guessed = data.runtimeMin > 0 ? data.runtimeMin * 60 : 0;
-    const useOneshot = source.kind !== "mp3" || guessed <= ONESHOT_MAX;
+    const useOneshot = source.kind !== "mp3";
     if (useOneshot) {
       return {
         archiveId: data.archiveId,
@@ -407,12 +406,14 @@ function tooLittleSpeech(words: SttWord[], durationSec: number) {
 export async function generateSpanishVtt(
   input: { archiveId: string; filmId: string; runtime: number },
   onProgress?: (progress: GenerateProgress) => void,
+  onPartial?: (vtt: string, cues: number) => void,
 ): Promise<{ vtt: string; source: "audio"; fileName: string; cues: number }> {
   onProgress?.({ phase: "audio", done: 0, total: 0 });
 
   const stored = await loadStoredSubs({ data: { filmId: input.filmId } }).catch(() => null);
   if (stored?.vtt) {
     onProgress?.({ phase: "done", done: stored.cues, total: stored.cues });
+    onPartial?.(stored.vtt, stored.cues);
     return { vtt: stored.vtt, source: "audio", fileName: stored.fileName, cues: stored.cues };
   }
 
@@ -420,60 +421,57 @@ export async function generateSpanishVtt(
     data: { archiveId: input.archiveId, filmId: input.filmId, runtimeMin: input.runtime },
   });
 
-  const words: SttWord[] = [];
+  const published: Cue[] = [];
   const langs: string[] = [];
   let heard = 0;
+  let wordCount = 0;
+
+  const publishSlice = async (sliceWords: SttWord[], language: string) => {
+    if (language) langs.push(language);
+    wordCount += sliceWords.length;
+    if (!sliceWords.length) return;
+    const raw = wordsToCues(sliceWords);
+    const spanish = langs.some((l) => l.toLowerCase().startsWith("es"));
+    const next = spanish ? raw : await translateCues(raw);
+    published.push(...next);
+    if (published.length) onPartial?.(cuesToVtt(published), published.length);
+  };
 
   if (prepared.mode === "oneshot") {
     onProgress?.({ phase: "transcribe", done: 0, total: 1 });
     const result = await transcribeAudioOneshot({ data: { url: prepared.url } });
-    words.push(...result.words);
-    if (result.language) langs.push(result.language);
     heard = result.duration || prepared.duration;
     onProgress?.({ phase: "transcribe", done: 1, total: 1 });
+    if (tooLittleSpeech(result.words, heard || input.runtime * 60)) {
+      throw new Error("No se oyen diálogos claros en la pista de audio. No inventamos el texto.");
+    }
+    onProgress?.({ phase: "translate", done: 0, total: 1 });
+    await publishSlice(result.words, result.language);
+    onProgress?.({ phase: "translate", done: 1, total: 1 });
   } else {
     const total = prepared.sliceCount;
     onProgress?.({ phase: "transcribe", done: 0, total });
-    const concurrency = 2;
-    for (let i = 0; i < total; i += concurrency) {
-      const indexes = Array.from({ length: Math.min(concurrency, total - i) }, (_, n) => i + n);
-      const parts = await Promise.all(
-        indexes.map((index) =>
-          transcribeAudioSlice({ data: { archiveId: input.archiveId, filmId: input.filmId, index } }),
-        ),
-      );
-      for (const part of parts) {
-        words.push(...part.words);
-        if (part.language) langs.push(part.language);
-        heard += part.duration;
-      }
-      onProgress?.({ phase: "transcribe", done: Math.min(i + parts.length, total), total });
+    for (let i = 0; i < total; i += 1) {
+      const part = await transcribeAudioSlice({
+        data: { archiveId: input.archiveId, filmId: input.filmId, index: i },
+      });
+      heard += part.duration;
+      onProgress?.({ phase: "transcribe", done: i + 1, total });
+      await publishSlice(part.words, part.language);
     }
   }
 
-  words.sort((a, b) => a.start - b.start);
   const duration = heard || prepared.duration || input.runtime * 60;
-  if (tooLittleSpeech(words, duration)) {
+  if (published.length < 3 || (duration >= 480 && wordCount / Math.max(duration / 60, 1) < 2.2)) {
     throw new Error("No se oyen diálogos claros en la pista de audio. No inventamos el texto.");
   }
 
-  let cues = wordsToCues(words);
-  const detected = langs.find((l) => l.toLowerCase().startsWith("es"))
-    ? "es"
-    : detectCaptionLanguage(cues);
-  if (detected !== "es") {
-    onProgress?.({ phase: "translate", done: 0, total: cues.length });
-    cues = await translateCues(cues, (done, total) => {
-      onProgress?.({ phase: "translate", done, total });
-    });
-  }
-
-  const vtt = cuesToVtt(cues);
+  const vtt = cuesToVtt(published);
   await storeGeneratedSubs({
-    data: { filmId: input.filmId, archiveId: input.archiveId, vtt, cues: cues.length },
+    data: { filmId: input.filmId, archiveId: input.archiveId, vtt, cues: published.length },
   }).catch(() => undefined);
-  onProgress?.({ phase: "done", done: cues.length, total: cues.length });
-  return { vtt, source: "audio", fileName: prepared.fileName, cues: cues.length };
+  onProgress?.({ phase: "done", done: published.length, total: published.length });
+  return { vtt, source: "audio", fileName: prepared.fileName, cues: published.length };
 }
 
 function openSubsDb(): Promise<IDBDatabase> {

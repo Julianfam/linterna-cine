@@ -10,6 +10,7 @@ import {
   wordsToCues,
 } from "../src/lib/subs-parse.ts";
 import { splitMp3 } from "../src/lib/mp3-slice.ts";
+import { bufferAhead } from "../src/lib/buffer.ts";
 import { readFile } from "node:fs/promises";
 
 test("parsea tiempos de Archive con centésimas", () => {
@@ -87,4 +88,14 @@ test("parte un mp3 en tramos", async () => {
   const total = slices.reduce((s, x) => s + x.duration, 0);
   assert.ok(total > 600 && total < 800);
   assert.ok(slices[0].bytes.byteLength > 1000);
+});
+
+test("calcula segundos de buffer por delante", () => {
+  const ranges = [
+    { start: 0, end: 12 },
+    { start: 40, end: 55 },
+  ];
+  assert.equal(bufferAhead(ranges, 3), 9);
+  assert.equal(bufferAhead(ranges, 42), 13);
+  assert.equal(bufferAhead(ranges, 20), 0);
 });

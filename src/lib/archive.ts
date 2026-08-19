@@ -287,6 +287,21 @@ export function prefetchStream(archiveId: string, filmId = "") {
   void resolveStreamClient(archiveId, filmId, prefer).catch(() => undefined);
 }
 
+/** Calienta la primera parte del archivo para que el player arranque ya. */
+export function warmupPlayback(url: string) {
+  if (typeof document === "undefined" || !url) return;
+  const href = url.split("#")[0];
+  let link = document.getElementById("linterna-video-preload") as HTMLLinkElement | null;
+  if (!link) {
+    link = document.createElement("link");
+    link.id = "linterna-video-preload";
+    link.rel = "preload";
+    link.as = "video";
+    document.head.appendChild(link);
+  }
+  if (link.getAttribute("href") !== href) link.setAttribute("href", href);
+}
+
 export const resolveStream = createServerFn({ method: "GET" })
   .validator((data: { archiveId: string; filmId?: string; preferMp4?: boolean }) => {
     const archiveId = data.archiveId.trim();

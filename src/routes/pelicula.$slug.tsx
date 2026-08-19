@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { GENRES, LICENSE_LABEL, posterUrl, relatedFilms } from "@/lib/catalog";
 import { resolveFilm } from "@/lib/discover";
 import { langInfo, playArchiveId, canGenerateCaptions } from "@/lib/languages";
-import { prefetchStream } from "@/lib/archive";
+import { prefetchStream, playbackStream, devicePrefersMp4, warmupPlayback } from "@/lib/archive";
 import { useLibrary } from "@/lib/library";
 import { useGeneratedCaptions } from "@/lib/use-captions";
 
@@ -51,6 +51,8 @@ function FilmPage() {
   useEffect(() => {
     prefetchStream(playArchiveId(film, "es"), film.id);
     prefetchStream(film.archiveId, film.id);
+    const warm = playbackStream(film.id, playArchiveId(film, "es"), devicePrefersMp4());
+    if (warm?.url) warmupPlayback(warm.url);
     if (film.id.startsWith("ia-")) addFilm(film);
   }, [film, addFilm]);
 

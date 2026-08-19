@@ -12,6 +12,7 @@ import {
   Volume2,
   VolumeX,
   Subtitles,
+  Tv,
 } from "lucide-react";
 import {
   devicePrefersMp4,
@@ -25,6 +26,7 @@ import { type Film } from "@/lib/catalog";
 import { langInfo } from "@/lib/languages";
 import { useLibrary } from "@/lib/library";
 import { cn, formatClock } from "@/lib/utils";
+import { TvPanel } from "@/components/tv-panel";
 
 export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "original" | "subs" }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -51,6 +53,7 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
   const [useEmbed, setUseEmbed] = useState(false);
   const [subsOn, setSubsOn] = useState(true);
   const [needsTap, setNeedsTap] = useState(false);
+  const [tvOpen, setTvOpen] = useState(false);
   const saveProgress = useLibrary((s) => s.saveProgress);
   const existing = useLibrary((s) => s.progress[film.id]);
 
@@ -175,6 +178,7 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
     v.setAttribute("playsinline", "true");
     v.setAttribute("webkit-playsinline", "true");
     v.setAttribute("x5-playsinline", "true");
+    v.setAttribute("x-webkit-airplay", "allow");
     if (v.readyState >= 1) onLoaded();
   }, [stream, apple]);
 
@@ -321,6 +325,17 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
         ) : null}
         <button
           type="button"
+          aria-label="Ver en la tele"
+          onClick={(e) => {
+            e.stopPropagation();
+            setTvOpen(true);
+          }}
+          className="grid size-12 shrink-0 place-items-center rounded-md bg-elevated text-fg ring-1 ring-border"
+        >
+          <Tv className="size-5" />
+        </button>
+        <button
+          type="button"
           aria-label={filled ? "Achicar pantalla" : "Agrandar pantalla"}
           onClick={(e) => {
             e.stopPropagation();
@@ -361,6 +376,7 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
               preload="auto"
               controls={apple}
               muted={apple ? muted : undefined}
+              disableRemotePlayback={false}
               onClick={() => {
                 bumpChrome();
                 if (!apple) togglePlay();
@@ -510,6 +526,16 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
             ) : null}
           </div>
         </div>
+      ) : null}
+
+      {tvOpen ? (
+        <TvPanel
+          film={film}
+          pista={pista}
+          stream={stream}
+          video={videoRef.current}
+          onClose={() => setTvOpen(false)}
+        />
       ) : null}
     </div>
   );

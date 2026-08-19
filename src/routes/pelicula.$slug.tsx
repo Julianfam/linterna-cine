@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { Bookmark, BookmarkCheck, Play } from "lucide-react";
+import { Bookmark, BookmarkCheck, Play, Tv } from "lucide-react";
 import { toast } from "sonner";
 import { Meta } from "@/components/hero";
 import { MovieRow } from "@/components/movie-row";
@@ -115,6 +115,12 @@ function FilmPage() {
                   </Link>
                 </Button>
               ) : null}
+              <Button asChild size="lg" variant="outline">
+                <Link to="/tv">
+                  <Tv className="size-4" />
+                  Ver en la tele
+                </Link>
+              </Button>
               <Button
                 type="button"
                 size="lg"

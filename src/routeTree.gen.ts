@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as BuscarRouteImport } from './routes/buscar'
 import { Route as ListaRouteImport } from './routes/lista'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as TvRouteImport } from './routes/tv'
 import { Route as GeneroGenreRouteImport } from './routes/genero.$genre'
 import { Route as PeliculaSlugRouteImport } from './routes/pelicula.$slug'
 import { Route as VerSlugRouteImport } from './routes/ver.$slug'
@@ -36,6 +37,11 @@ const ListaRoute = ListaRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TvRoute = TvRouteImport.update({
+  id: '/tv',
+  path: '/tv',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GeneroGenreRoute = GeneroGenreRouteImport.update({
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/buscar': typeof BuscarRoute
   '/lista': typeof ListaRoute
   '/login': typeof LoginRoute
+  '/tv': typeof TvRoute
   '/genero/$genre': typeof GeneroGenreRoute
   '/pelicula/$slug': typeof PeliculaSlugRoute
   '/ver/$slug': typeof VerSlugRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/buscar': typeof BuscarRoute
   '/lista': typeof ListaRoute
   '/login': typeof LoginRoute
+  '/tv': typeof TvRoute
   '/genero/$genre': typeof GeneroGenreRoute
   '/pelicula/$slug': typeof PeliculaSlugRoute
   '/ver/$slug': typeof VerSlugRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/buscar': typeof BuscarRoute
   '/lista': typeof ListaRoute
   '/login': typeof LoginRoute
+  '/tv': typeof TvRoute
   '/genero/$genre': typeof GeneroGenreRoute
   '/pelicula/$slug': typeof PeliculaSlugRoute
   '/ver/$slug': typeof VerSlugRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/buscar'
     | '/lista'
     | '/login'
+    | '/tv'
     | '/genero/$genre'
     | '/pelicula/$slug'
     | '/ver/$slug'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/buscar'
     | '/lista'
     | '/login'
+    | '/tv'
     | '/genero/$genre'
     | '/pelicula/$slug'
     | '/ver/$slug'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/buscar'
     | '/lista'
     | '/login'
+    | '/tv'
     | '/genero/$genre'
     | '/pelicula/$slug'
     | '/ver/$slug'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   BuscarRoute: typeof BuscarRoute
   ListaRoute: typeof ListaRoute
   LoginRoute: typeof LoginRoute
+  TvRoute: typeof TvRoute
   GeneroGenreRoute: typeof GeneroGenreRoute
   PeliculaSlugRoute: typeof PeliculaSlugRoute
   VerSlugRoute: typeof VerSlugRoute
@@ -162,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tv': {
+      id: '/tv'
+      path: '/tv'
+      fullPath: '/tv'
+      preLoaderRoute: typeof TvRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/genero/$genre': {
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   BuscarRoute: BuscarRoute,
   ListaRoute: ListaRoute,
   LoginRoute: LoginRoute,
+  TvRoute: TvRoute,
   GeneroGenreRoute: GeneroGenreRoute,
   PeliculaSlugRoute: PeliculaSlugRoute,
   VerSlugRoute: VerSlugRoute,

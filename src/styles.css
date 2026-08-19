@@ -102,3 +102,9 @@ video::cue {
 video::-webkit-media-controls-start-playback-button {
   display: none;
 }
+
+.tv-card:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 6px;
+  transform: scale(1.03);
+}

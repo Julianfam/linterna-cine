@@ -28,6 +28,9 @@ export function SiteFooter() {
             <Link to="/lista" className="block text-muted hover:text-fg">
               Mi lista
             </Link>
+            <Link to="/tv" className="block text-muted hover:text-fg">
+              Sala de TV
+            </Link>
           </div>
           <div className="space-y-2">
             <p className="text-xs tracking-[0.18em] text-subtle uppercase">Origen</p>

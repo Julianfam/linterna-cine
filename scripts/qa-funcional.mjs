@@ -148,6 +148,26 @@ await test("ipad-controls-and-mp4", async () => {
   await ipad.close();
 });
 
+await test("tv-send-and-sala", async () => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${base}/ver/sintel?pista=es`, { waitUntil: "domcontentloaded", timeout: 25000 });
+  await page.waitForTimeout(1200);
+  const tvBtn = page.getByRole("button", { name: "Ver en la tele" });
+  assert(await tvBtn.isVisible(), "no hay botón de tele en el player");
+  await tvBtn.click();
+  await page.waitForTimeout(300);
+  const dialog = page.getByRole("dialog");
+  const text = await dialog.innerText();
+  assert(/Apple TV|Chromecast|Sala de TV/i.test(text), "el panel de TV no explica cómo enviar");
+  assert(await page.getByRole("button", { name: /Enviar a Apple TV o Chromecast/i }).isVisible(), "falta enviar");
+  await page.goto(`${base}/tv`, { waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.waitForTimeout(700);
+  const sala = await page.locator("body").innerText();
+  assert(sala.includes("Sala de TV"), "la sala de TV no carga");
+  assert(sala.includes("Sintel") || sala.includes("Reproducir") || sala.includes("Para ver ahora"), "cartelera de TV vacía");
+  await page.screenshot({ path: "/workspace/screenshots/qa-tv.png" });
+});
+
 await browser.close();
 
 const failed = results.filter((r) => !r.ok);

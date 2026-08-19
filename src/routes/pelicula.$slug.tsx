@@ -61,7 +61,7 @@ function FilmPage() {
       <SiteNav />
       <div className="relative">
         <div className="absolute inset-0 h-[70vh] overflow-hidden">
-          <img src={posterUrl(film)} alt="" className="size-full object-cover opacity-40" />
+          <img src={posterUrl(film, "hero")} alt="" className="size-full object-cover opacity-40" decoding="async" />
           <div className="absolute inset-0 bg-linear-to-t from-bg via-bg/70 to-bg/40" />
         </div>
         <div className="relative mx-auto flex max-w-7xl flex-col gap-8 px-4 pt-28 pb-12 sm:px-6 lg:flex-row lg:items-end lg:gap-12">

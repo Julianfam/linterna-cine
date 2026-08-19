@@ -31,7 +31,7 @@ await test("home-render", async () => {
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForTimeout(1600);
   const text = await page.locator("body").innerText();
-  assert(text.includes("Linterna"), "no muestra Linterna");
+  assert(text.includes("CineLinterna"), "no muestra CineLinterna");
   assert(text.includes("Reproducir"), "no muestra Reproducir");
   assert(text.includes("En español") || text.includes("Metrópolis"), "cartelera vacía");
   await page.screenshot({ path: "/workspace/screenshots/qa-home.png" });

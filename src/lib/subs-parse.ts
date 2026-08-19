@@ -210,9 +210,10 @@ export function scoreAudioFile(file: ArchiveFile): number {
   const size = num(file.size);
   if (!name || name.includes(".thumbs") || name.includes("__ia_thumb")) return -1;
   if (/\.(zip|ffp|flac|cue|m3u)$/i.test(name)) return -1;
-  if (/(^|[-_])(lfe|ls|rs)(\.|$)|dvd-lfe|dvd-ls|dvd-rs|5\.1-dvd-[clr](\.|_)/i.test(name)) {
-    if (!/st-16|stereo|_st[-_.]/.test(name)) return -1;
+  if (/(^|[-_])(lfe|ls|rs)(\.|$)|dvd-lfe|dvd-ls|dvd-rs/i.test(name)) {
+    return -1;
   }
+  const isCenter = /5\.1-dvd-c(\.|_|$)|[-_]c(\.|_64kb|_vbr)?\.mp3$/i.test(name);
 
   const isMp3 = name.endsWith(".mp3") || format.includes("mp3");
   const isOgg = name.endsWith(".ogg") || format.includes("vorbis");
@@ -226,6 +227,7 @@ export function scoreAudioFile(file: ArchiveFile): number {
   if (isMp3) score += 42;
   if (format.includes("64kb") || name.includes("64kb")) score += 28;
   if (/stereo|st-16|_st[-_.]/.test(name)) score += 18;
+  if (isCenter) score += 16;
   if (isOgg) score += 16;
   if (isM4a) score += 14;
   if (isMp4 && name.includes("512kb")) score += 10;

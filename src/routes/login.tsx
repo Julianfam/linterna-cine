@@ -16,7 +16,7 @@ function Login() {
       <div className="relative w-full max-w-sm rounded-xl border border-border bg-surface/90 p-7">
         <Link to="/" className="flex items-center gap-2 text-fg">
           <LanternMark />
-          <span className="font-display text-2xl font-medium">Linterna</span>
+          <span className="font-display text-2xl font-medium">CineLinterna</span>
         </Link>
         <h1 className="mt-6 font-display text-3xl font-medium tracking-tight">Entra a la sala</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted">

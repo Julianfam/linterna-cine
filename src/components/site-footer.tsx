@@ -8,7 +8,7 @@ export function SiteFooter() {
         <div className="max-w-md">
           <div className="flex items-center gap-2 text-fg">
             <LanternMark />
-            <span className="font-display text-xl font-medium">Linterna</span>
+            <span className="font-display text-xl font-medium">CineLinterna</span>
           </div>
           <p className="mt-3 text-sm leading-relaxed text-muted">
             Cine que ya es de todos. Clásicos en dominio público y obras liberadas bajo

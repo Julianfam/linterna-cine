@@ -1100,8 +1100,20 @@ export function relatedFilms(film: Film, limit = 8) {
   return scored.slice(0, limit).map((x) => x.f);
 }
 
-export function posterUrl(film: Film) {
-  return film.poster ?? `https://archive.org/services/img/${film.archiveId}`;
+export type PosterKind = "card" | "hero" | "full";
+
+function posterStem(film: Film) {
+  if (!film.poster) return null;
+  const match = film.poster.match(/\/posters\/([^/]+)\.[^.]+$/);
+  return match?.[1] ?? null;
+}
+
+export function posterUrl(film: Film, kind: PosterKind = "card") {
+  const stem = posterStem(film);
+  if (!stem) return `https://archive.org/services/img/${film.archiveId}`;
+  if (kind === "card") return `/posters/card/${stem}.webp`;
+  if (kind === "hero") return `/posters/hero/${stem}.webp`;
+  return film.poster;
 }
 
 export const BROWSE_ROWS: { id: GenreId; title: string }[] = [

@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import { Info, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { heroFilms, posterUrl, type Film } from "@/lib/catalog";
-import { devicePrefersMp4, playbackStream, warmupPlayback } from "@/lib/archive";
 import { formatRuntime } from "@/lib/utils";
 
 export function Hero() {
@@ -19,29 +18,25 @@ export function Hero() {
   }, [films.length]);
 
   const film = films[index] ?? films[0];
-
-  useEffect(() => {
-    if (!film) return;
-    const warm = playbackStream(film.id, film.archiveId, devicePrefersMp4());
-    if (warm?.url) warmupPlayback(warm.url);
-  }, [film]);
-
   if (!film) return null;
 
   return (
     <section className="relative min-h-[88svh] overflow-hidden">
       <div className="absolute inset-0">
-        {films.map((f, i) => (
-          <img
-            key={f.id}
-            src={posterUrl(f)}
-            alt=""
-            className="absolute inset-0 size-full object-cover transition-opacity duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{ opacity: i === index ? 1 : 0 }}
-            loading={i === 0 ? "eager" : "lazy"}
-            decoding="async"
-          />
-        ))}
+        {films.map((f, i) =>
+          Math.abs(i - index) > 1 && i !== 0 ? null : (
+            <img
+              key={f.id}
+              src={posterUrl(f, "hero")}
+              alt=""
+              className="absolute inset-0 size-full object-cover transition-opacity duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+              style={{ opacity: i === index ? 1 : 0 }}
+              loading={i === 0 ? "eager" : "lazy"}
+              fetchPriority={i === 0 ? "high" : "auto"}
+              decoding="async"
+            />
+          ),
+        )}
         <div className="absolute inset-0 bg-linear-to-t from-bg via-bg/55 to-bg/25" />
         <div className="absolute inset-0 bg-linear-to-r from-bg via-bg/40 to-transparent" />
       </div>

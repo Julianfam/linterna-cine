@@ -29,7 +29,7 @@ export function SiteNav({ solid = false }: { solid?: boolean }) {
           <span className="grid size-8 place-items-center rounded-sm border border-border bg-surface">
             <LanternMark />
           </span>
-          <span className="font-display text-2xl font-medium tracking-tight">Linterna</span>
+          <span className="font-display text-2xl font-medium tracking-tight">CineLinterna</span>
         </Link>
 
         <nav className="ml-4 hidden items-center gap-5 text-sm text-muted md:flex">

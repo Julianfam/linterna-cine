@@ -108,3 +108,8 @@ video::-webkit-media-controls-start-playback-button {
   outline-offset: 6px;
   transform: scale(1.03);
 }
+
+.catalog-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+}

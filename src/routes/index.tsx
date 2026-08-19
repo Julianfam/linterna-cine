@@ -1,12 +1,10 @@
-import { useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Hero } from "@/components/hero";
 import { ContinueRow, MovieRow } from "@/components/movie-row";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/nav";
-import { BROWSE_ROWS, filmsByGenre, getFilm, heroFilms } from "@/lib/catalog";
-import { prefetchStream } from "@/lib/archive";
-import { playArchiveId, spanishFilms } from "@/lib/languages";
+import { BROWSE_ROWS, filmsByGenre, getFilm } from "@/lib/catalog";
+import { spanishFilms } from "@/lib/languages";
 import { useLibrary } from "@/lib/library";
 
 export const Route = createFileRoute("/")({ component: Home });
@@ -26,12 +24,6 @@ function Home() {
   const progressBySlug = Object.fromEntries(
     Object.values(progress).map((p) => [p.slug, p.duration > 0 ? p.seconds / p.duration : 0]),
   );
-
-  useEffect(() => {
-    for (const film of [...heroFilms(), ...spanishFilms().slice(0, 6)]) {
-      prefetchStream(playArchiveId(film, "es"), film.id);
-    }
-  }, []);
 
   return (
     <div className="min-h-svh bg-bg text-fg">

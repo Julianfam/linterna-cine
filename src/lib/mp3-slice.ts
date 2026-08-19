@@ -86,3 +86,26 @@ export function splitMp3(buf: Uint8Array, sliceSec = 75): Mp3Slice[] {
 export function mp3Duration(buf: Uint8Array): number {
   return splitMp3(buf, Number.POSITIVE_INFINITY)[0]?.duration ?? 0;
 }
+
+export function audioByteRange(
+  size: number,
+  duration: number,
+  index: number,
+  sliceSec = 45,
+): { from: number; to: number; startTime: number } {
+  const bytes = Math.max(1, Math.floor(size));
+  const seconds = Math.max(1, duration);
+  const bps = bytes / seconds;
+  const from = Math.min(bytes - 1, Math.floor(index * sliceSec * bps));
+  const rawTo = Math.floor((index + 1) * sliceSec * bps) + 4096;
+  const to = Math.min(bytes - 1, Math.max(from, rawTo));
+  return { from, to, startTime: from / bps };
+}
+
+export function firstMp3FrameOffset(buf: Uint8Array): number {
+  const limit = Math.min(buf.length - 4, 64_000);
+  for (let i = 0; i < limit; i += 1) {
+    if (readFrame(buf, i)) return i;
+  }
+  return 0;
+}

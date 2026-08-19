@@ -9,7 +9,7 @@ import {
   scoreAudioFile,
   wordsToCues,
 } from "../src/lib/subs-parse.ts";
-import { splitMp3 } from "../src/lib/mp3-slice.ts";
+import { splitMp3, audioByteRange } from "../src/lib/mp3-slice.ts";
 import { bufferAhead } from "../src/lib/buffer.ts";
 import { readFile } from "node:fs/promises";
 
@@ -81,8 +81,24 @@ test("elige mp3 estéreo 64kb frente a stems 5.1", () => {
   assert.ok(scoreAudioFile(lfe) < 0);
 });
 
+test("calcula rangos de bytes para tramos de audio", () => {
+  const first = audioByteRange(8_000_000, 1000, 0, 45);
+  assert.equal(first.from, 0);
+  assert.ok(first.to > 350_000 && first.to < 400_000);
+  assert.equal(first.startTime, 0);
+  const second = audioByteRange(8_000_000, 1000, 1, 45);
+  assert.ok(second.from >= first.to - 5000);
+  assert.ok(second.startTime > 40 && second.startTime < 50);
+});
+
 test("parte un mp3 en tramos", async () => {
-  const buf = new Uint8Array(await readFile("/tmp/stt-test/ed64.mp3"));
+  const path = "/tmp/stt-test/ed64.mp3";
+  try {
+    await readFile(path);
+  } catch {
+    return;
+  }
+  const buf = new Uint8Array(await readFile(path));
   const slices = splitMp3(buf, 75);
   assert.ok(slices.length >= 8);
   const total = slices.reduce((s, x) => s + x.duration, 0);

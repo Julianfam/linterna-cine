@@ -48,7 +48,12 @@ export function useGeneratedCaptions(film: Film, enabled: boolean) {
     partialToast.current = false;
     try {
       const result = await generateSpanishVtt(
-        { archiveId: film.archiveId, filmId: film.id, runtime: film.runtime },
+        {
+          archiveId: film.archiveId,
+          filmId: film.id,
+          runtime: film.runtime,
+          language: film.language === "Español" ? "es" : "en",
+        },
         setProgress,
         (vtt, cues) => {
           if (blobRef.current) URL.revokeObjectURL(blobRef.current);

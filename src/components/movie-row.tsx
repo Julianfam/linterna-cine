@@ -23,7 +23,7 @@ export function MovieRow({
   };
 
   return (
-    <section className="relative">
+    <section className="relative catalog-row">
       <div className="mx-auto flex max-w-7xl items-end justify-between px-4 sm:px-6">
         <h2 className="font-display text-2xl font-medium tracking-tight text-fg sm:text-3xl">{title}</h2>
       </div>

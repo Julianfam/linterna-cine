@@ -8,10 +8,10 @@ export const Route = createFileRoute("/tv")({
   component: TvSala,
   head: () => ({
     meta: [
-      { title: "Linterna · Sala de TV" },
+      { title: "CineLinterna · Sala de TV" },
       {
         name: "description",
-        content: "Cartelera grande para ver Linterna en el televisor.",
+        content: "Cartelera grande para ver CineLinterna en el televisor.",
       },
     ],
   }),

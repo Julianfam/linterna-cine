@@ -1,4 +1,4 @@
-# Linterna
+# CineLinterna
 
 Sala de cine libre: películas de dominio público y Creative Commons.
 

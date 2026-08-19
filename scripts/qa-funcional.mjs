@@ -110,6 +110,44 @@ await test("mobile-no-overflow", async () => {
   assert(!overflow, "hay desborde horizontal en móvil");
 });
 
+await test("ipad-controls-and-mp4", async () => {
+  const ipad = await browser.newPage({
+    viewport: { width: 1024, height: 768 },
+    isMobile: true,
+    hasTouch: true,
+    userAgent:
+      "Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+  });
+  await ipad.goto(`${base}/ver/sintel?pista=es`, { waitUntil: "domcontentloaded", timeout: 25000 });
+  await ipad.waitForTimeout(2200);
+  const back = ipad.getByRole("link", { name: "Volver" });
+  const enlarge = ipad.getByRole("button", { name: /Agrandar pantalla|Achicar pantalla/ });
+  assert(await back.isVisible(), "volver no se ve en iPad");
+  assert(await enlarge.isVisible(), "agrandar no se ve en iPad");
+  const info = await ipad.evaluate(() => {
+    const v = document.querySelector("video");
+    const backBtn = document.querySelector('[aria-label="Volver"]');
+    const enlargeBtn = document.querySelector('[aria-label="Agrandar pantalla"], [aria-label="Achicar pantalla"]');
+    const br = backBtn?.getBoundingClientRect();
+    const er = enlargeBtn?.getBoundingClientRect();
+    return {
+      src: v?.currentSrc || v?.src || "",
+      playsInline: Boolean(v?.playsInline),
+      controls: Boolean(v?.controls),
+      backTop: br?.top ?? -1,
+      enlargeTop: er?.top ?? -1,
+      videoTop: v?.getBoundingClientRect().top ?? 0,
+    };
+  });
+  assert(info.playsInline, "falta playsInline en iPad");
+  assert(info.controls, "en iPad el vídeo debe mostrar controles nativos");
+  assert(/\.mp4(\?|$)/i.test(info.src) || info.src.includes("archive.org"), `iPad no usa mp4: ${info.src}`);
+  assert(info.backTop >= 0 && info.backTop < info.videoTop + 2, "volver quedó debajo del vídeo");
+  assert(info.enlargeTop >= 0 && info.enlargeTop < info.videoTop + 2, "agrandar quedó debajo del vídeo");
+  await ipad.screenshot({ path: "/workspace/screenshots/qa-ipad.png" });
+  await ipad.close();
+});
+
 await browser.close();
 
 const failed = results.filter((r) => !r.ok);

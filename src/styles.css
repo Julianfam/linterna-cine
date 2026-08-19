@@ -93,3 +93,12 @@ video::cue {
   color: #f3efe6;
   background: rgb(9 9 11 / 0.72);
 }
+
+.player-chrome {
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+}
+
+video::-webkit-media-controls-start-playback-button {
+  display: none;
+}

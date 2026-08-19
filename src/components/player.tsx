@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -13,7 +13,14 @@ import {
   VolumeX,
   Subtitles,
 } from "lucide-react";
-import { instantStream, knownArchiveStream, resolveStream, resolveStreamClient, type StreamInfo } from "@/lib/archive";
+import {
+  devicePrefersMp4,
+  knownArchiveStream,
+  playbackStream,
+  resolveStream,
+  resolveStreamClient,
+  type StreamInfo,
+} from "@/lib/archive";
 import { type Film } from "@/lib/catalog";
 import { langInfo } from "@/lib/languages";
 import { useLibrary } from "@/lib/library";
@@ -27,8 +34,9 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
   const useBurned = pista === "subs" && Boolean(lang.esArchiveId);
   const playId = useBurned ? (lang.esArchiveId as string) : film.archiveId;
   const subUrl = useBurned ? undefined : lang.subUrl;
+  const [apple, setApple] = useState(false);
   const [stream, setStream] = useState<StreamInfo | null>(() =>
-    useBurned ? knownArchiveStream(playId) : instantStream(film.id, playId),
+    useBurned ? knownArchiveStream(playId) : playbackStream(film.id, playId, false),
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,12 +50,20 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
   const [filled, setFilled] = useState(false);
   const [useEmbed, setUseEmbed] = useState(false);
   const [subsOn, setSubsOn] = useState(true);
+  const [needsTap, setNeedsTap] = useState(false);
   const saveProgress = useLibrary((s) => s.saveProgress);
   const existing = useLibrary((s) => s.progress[film.id]);
 
+  useLayoutEffect(() => {
+    setApple(devicePrefersMp4());
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    const known = useBurned ? knownArchiveStream(playId) : instantStream(film.id, playId);
+    const preferMp4 = apple || devicePrefersMp4();
+    const known = useBurned
+      ? knownArchiveStream(playId)
+      : playbackStream(film.id, playId, preferMp4);
     if (known) {
       setStream(known);
       setError(null);
@@ -62,11 +78,13 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
 
     const load = async () => {
       try {
-        const info = await resolveStreamClient(playId, film.id);
+        const info = await resolveStreamClient(playId, film.id, preferMp4);
         if (!cancelled) setStream(info);
       } catch {
         try {
-          const info = await resolveStream({ data: { archiveId: playId, filmId: film.id } });
+          const info = await resolveStream({
+            data: { archiveId: playId, filmId: film.id, preferMp4 },
+          });
           if (!cancelled) setStream(info);
         } catch (err: unknown) {
           if (!cancelled) {
@@ -80,7 +98,7 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
     return () => {
       cancelled = true;
     };
-  }, [playId, film.id, useBurned]);
+  }, [playId, film.id, useBurned, apple]);
 
   useEffect(() => {
     if (!stream || useEmbed) return;
@@ -154,11 +172,15 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !stream) return;
+    v.setAttribute("playsinline", "true");
+    v.setAttribute("webkit-playsinline", "true");
+    v.setAttribute("x5-playsinline", "true");
     if (v.readyState >= 1) onLoaded();
-  }, [stream]);
+  }, [stream, apple]);
 
   const bumpChrome = () => {
     setChrome(true);
+    if (apple) return;
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
     hideTimer.current = window.setTimeout(() => {
       if (useEmbed) return;
@@ -169,8 +191,30 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
-    if (v.paused) void v.play();
+    if (v.paused) void startPlayback();
     else v.pause();
+  };
+
+  const startPlayback = async () => {
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      await v.play();
+      setNeedsTap(false);
+      setLoading(false);
+    } catch {
+      setNeedsTap(true);
+      setLoading(false);
+    }
+  };
+
+  const unmute = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = false;
+    setMuted(false);
+    setNeedsTap(false);
+    void v.play().catch(() => setNeedsTap(true));
   };
 
   const exitFill = () => {
@@ -185,7 +229,9 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
     }
     setFilled(true);
     setChrome(true);
-    void enterNativeFullscreen(shellRef.current, videoRef.current);
+    if (!apple) {
+      void enterNativeFullscreen(shellRef.current, videoRef.current);
+    }
   };
 
   const onLoaded = () => {
@@ -196,7 +242,11 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
     if (existing && existing.seconds > 8 && existing.seconds < (v.duration || 0) - 10) {
       v.currentTime = existing.seconds;
     }
-    void v.play().catch(() => undefined);
+    if (apple) {
+      v.muted = true;
+      setMuted(true);
+    }
+    void startPlayback();
   };
 
   const onTime = () => {
@@ -215,29 +265,84 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
     v.currentTime = ratio * v.duration;
   };
 
+  const showChrome = apple || chrome;
+  const showUnmute = Boolean((apple && muted) || needsTap);
+
   return (
     <div
       ref={shellRef}
-      className={cn("bg-bg text-fg", filled ? "fixed inset-0 z-80" : "relative min-h-svh")}
+      className={cn(
+        "flex flex-col bg-bg text-fg",
+        filled ? "fixed inset-0 z-80" : "relative min-h-svh",
+      )}
       style={
         filled
           ? { position: "fixed", inset: 0, zIndex: 80, width: "100vw", height: "100dvh", background: "#09090b" }
           : undefined
       }
       onMouseMove={bumpChrome}
-      onTouchStart={bumpChrome}
+      onPointerDown={bumpChrome}
     >
       <div
-        className={
-          filled
-            ? "absolute inset-0"
-            : "mx-auto flex min-h-svh max-w-6xl items-center px-3 pt-16 pb-28 sm:px-6"
-        }
+        className="player-chrome relative z-20 flex items-center gap-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 sm:px-5"
+        style={{
+          background: apple || filled ? "#09090b" : "transparent",
+        }}
+      >
+        <Link
+          to="/pelicula/$slug"
+          params={{ slug: film.id }}
+          className="grid size-12 shrink-0 place-items-center rounded-md bg-elevated text-fg"
+          aria-label="Volver"
+        >
+          <ArrowLeft className="size-5" />
+        </Link>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-xl text-fg sm:text-2xl">{film.title}</p>
+          <p className="text-xs text-muted tabular-nums">
+            {film.year} · {film.director.split(",")[0]}
+          </p>
+        </div>
+        {showUnmute ? (
+          <button
+            type="button"
+            aria-label={needsTap && !playing ? "Reproducir" : "Activar sonido"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (needsTap && videoRef.current?.paused) void startPlayback();
+              unmute();
+            }}
+            className="inline-flex h-12 shrink-0 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-fg sm:px-4"
+          >
+            <Volume2 className="size-4" />
+            <span className="hidden sm:inline">{needsTap && !playing ? "Reproducir" : "Tocar para oír"}</span>
+            <span className="sm:hidden">{needsTap && !playing ? "Play" : "Audio"}</span>
+          </button>
+        ) : null}
+        <button
+          type="button"
+          aria-label={filled ? "Achicar pantalla" : "Agrandar pantalla"}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFill();
+          }}
+          className="grid size-12 shrink-0 place-items-center rounded-md bg-elevated text-fg ring-1 ring-border"
+        >
+          {filled ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
+        </button>
+      </div>
+
+      <div
+        className={cn(
+          "relative z-0 min-h-0",
+          filled ? "flex-1" : "flex flex-1 items-center justify-center px-3 pb-6 sm:px-6",
+        )}
       >
         <div
-          className={
-            filled ? "absolute inset-0 bg-bg" : "relative aspect-video w-full overflow-hidden rounded-lg bg-elevated"
-          }
+          className={cn(
+            "overflow-hidden bg-elevated",
+            filled ? "absolute inset-0" : "relative mx-auto aspect-video w-full max-w-6xl rounded-lg",
+          )}
         >
           {useEmbed && stream ? (
             <iframe
@@ -254,12 +359,20 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
               className={cn("absolute inset-0 size-full bg-bg", filled ? "object-cover" : "object-contain")}
               playsInline
               preload="auto"
-              onClick={togglePlay}
+              controls={apple}
+              muted={apple ? muted : undefined}
+              onClick={() => {
+                bumpChrome();
+                if (!apple) togglePlay();
+              }}
               onDoubleClick={(e) => {
                 e.preventDefault();
                 toggleFill();
               }}
-              onPlay={() => setPlaying(true)}
+              onPlay={() => {
+                setPlaying(true);
+                setNeedsTap(false);
+              }}
               onPause={() => {
                 setPlaying(false);
                 setChrome(true);
@@ -270,11 +383,16 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
               onTimeUpdate={onTime}
               onWaiting={() => setLoading(true)}
               onPlaying={() => setLoading(false)}
+              onVolumeChange={() => {
+                const v = videoRef.current;
+                if (!v) return;
+                setMuted(v.muted);
+              }}
               onError={() => {
                 const v = videoRef.current;
                 if (stream.fallbackUrl && v && !v.src.includes(stream.fallbackUrl)) {
                   v.src = stream.fallbackUrl;
-                  void v.play().catch(() => undefined);
+                  void startPlayback();
                   return;
                 }
                 setUseEmbed(true);
@@ -288,7 +406,7 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
           ) : null}
 
           {loading && !error && !useEmbed ? (
-            <div className="absolute inset-0 grid place-items-center px-6">
+            <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center px-6">
               <div className="text-center">
                 <div className="mx-auto size-10 animate-spin rounded-full border-2 border-border border-t-primary" />
                 <p className="mt-4 text-sm text-muted">Abriendo una copia ligera…</p>
@@ -299,7 +417,7 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
       </div>
 
       {error ? (
-        <div className="absolute inset-0 grid place-items-center px-6">
+        <div className="absolute inset-0 z-30 grid place-items-center px-6">
           <div className="max-w-md text-center">
             <p className="font-display text-3xl text-fg">No hay señal</p>
             <p className="mt-3 text-sm text-muted">{error}</p>
@@ -314,35 +432,13 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
         </div>
       ) : null}
 
-      <div
-        className="pointer-events-none absolute inset-0 bg-linear-to-t from-bg via-transparent to-bg/50 transition-opacity duration-200"
-        style={{ opacity: chrome && !useEmbed ? 1 : 0 }}
-      />
-
-      <div
-        className="absolute inset-x-0 top-0 z-10 flex items-center gap-3 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pr-16 pb-8 transition-opacity duration-200 sm:px-5 sm:pr-20"
-        style={{ opacity: chrome ? 1 : 0, pointerEvents: chrome ? "auto" : "none" }}
-      >
-        <Link
-          to="/pelicula/$slug"
-          params={{ slug: film.id }}
-          className="grid size-11 place-items-center rounded-md bg-bg/40 text-fg hover:bg-elevated"
-          aria-label="Volver"
-        >
-          <ArrowLeft className="size-5" />
-        </Link>
-        <div className="min-w-0">
-          <p className="truncate font-display text-xl text-fg sm:text-2xl">{film.title}</p>
-          <p className="text-xs text-muted tabular-nums">
-            {film.year} · {film.director.split(",")[0]}
-          </p>
-        </div>
-      </div>
-
-      {!useEmbed ? (
+      {!useEmbed && !apple ? (
         <div
-          className="absolute inset-x-0 bottom-0 z-10 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] transition-opacity duration-200 sm:px-5"
-          style={{ opacity: chrome ? 1 : 0, pointerEvents: chrome ? "auto" : "none" }}
+          className={cn(
+            "player-chrome z-20 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] transition-opacity duration-200 sm:px-5",
+            filled ? "absolute inset-x-0 bottom-0" : "relative",
+          )}
+          style={{ opacity: showChrome ? 1 : 0, pointerEvents: showChrome ? "auto" : "none" }}
         >
           <SeekBar current={current} duration={duration} buffered={buffered} onSeek={seek} />
           <div className="mt-3 flex items-center gap-1 sm:gap-2">
@@ -415,18 +511,6 @@ export function Player({ film, pista = "es" }: { film: Film; pista?: "es" | "ori
           </div>
         </div>
       ) : null}
-
-      <button
-        type="button"
-        aria-label={filled ? "Achicar pantalla" : "Agrandar pantalla"}
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleFill();
-        }}
-        className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-3 z-30 grid size-12 place-items-center rounded-md bg-bg/80 text-fg ring-1 ring-border hover:bg-elevated sm:right-5"
-      >
-        {filled ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
-      </button>
     </div>
   );
 }
@@ -489,7 +573,7 @@ function IconBtn({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="grid size-11 place-items-center rounded-md text-fg hover:bg-elevated"
+      className="grid size-12 place-items-center rounded-md text-fg hover:bg-elevated"
     >
       {children}
     </button>
@@ -512,14 +596,14 @@ function SeekBar({
   return (
     <button
       type="button"
-      className="relative block h-5 w-full"
+      className="relative block h-8 w-full"
       aria-label="Posición"
       onClick={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
         onSeek((e.clientX - rect.left) / rect.width);
       }}
     >
-      <span className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-elevated">
+      <span className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-elevated">
         <span className="absolute inset-y-0 left-0 bg-subtle/50" style={{ width: `${buf * 100}%` }} />
         <span className="absolute inset-y-0 left-0 bg-primary" style={{ width: `${ratio * 100}%` }} />
       </span>

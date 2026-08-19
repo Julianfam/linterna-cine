@@ -84,6 +84,16 @@ const FAST_FILES: Record<string, { file: string; fallback?: string }> = {
     file: "CarnivalOfSouls_512kb.mp4",
     fallback: "CarnivalOfSouls.mp4",
   },
+  "Nosferatu_most_complete_version_93_mins.": {
+    file: "Nosferatu_1922_Symphony_of_Horror_512kb.mp4",
+  },
+  DasKabinettdesDoktorCaligariTheCabinetofDrCaligari: {
+    file: "The_Cabinet_of_Dr._Caligari_512kb.mp4",
+  },
+  The_General_Buster_Keaton: {
+    file: "The_General_512kb.mp4",
+    fallback: "The_General.mp4",
+  },
 };
 
 const memory = new Map<string, StreamInfo>();
@@ -106,6 +116,15 @@ function embedUrl(archiveId: string) {
   return `https://archive.org/embed/${encodeURIComponent(archiveId)}?autoplay=1`;
 }
 
+/** iPad/iPhone: WebM/VP9 suele ir sin audio. Hay que servir H.264 + AAC. */
+export function devicePrefersMp4() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/iPad|iPhone|iPod/.test(ua)) return true;
+  if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return true;
+  return false;
+}
+
 export function knownArchiveStream(archiveId: string): StreamInfo | null {
   const known = FAST_FILES[archiveId];
   if (!known) return null;
@@ -114,24 +133,42 @@ export function knownArchiveStream(archiveId: string): StreamInfo | null {
     url: archiveFileUrl(archiveId, known.file),
     fallbackUrl: known.fallback ? archiveFileUrl(archiveId, known.fallback) : undefined,
     fileName: known.file,
+    format: "mp4",
     embedUrl: embedUrl(archiveId),
   };
 }
 
-export function instantStream(filmId: string, archiveId: string): StreamInfo | null {
+function wikiStream(filmId: string, archiveId: string, ia: StreamInfo | null): StreamInfo | null {
   const wiki = WIKI_STREAMS[filmId];
-  if (wiki) {
-    const ia = knownArchiveStream(archiveId);
-    return {
-      archiveId,
-      url: wiki,
-      fallbackUrl: ia?.url,
-      fileName: wiki.split("/").pop() ?? "stream.webm",
-      format: "webm",
-      embedUrl: embedUrl(archiveId),
-    };
+  if (!wiki) return null;
+  return {
+    archiveId,
+    url: wiki,
+    fallbackUrl: ia?.url,
+    fileName: wiki.split("/").pop() ?? "stream.webm",
+    format: "webm",
+    embedUrl: embedUrl(archiveId),
+  };
+}
+
+export function playbackStream(
+  filmId: string,
+  archiveId: string,
+  preferMp4 = false,
+): StreamInfo | null {
+  const ia = knownArchiveStream(archiveId);
+  const wiki = wikiStream(filmId, archiveId, ia);
+  if (preferMp4) {
+    if (ia) {
+      return { ...ia, fallbackUrl: wiki?.url ?? ia.fallbackUrl, format: "mp4" };
+    }
+    return null;
   }
-  return knownArchiveStream(archiveId);
+  return wiki ?? ia;
+}
+
+export function instantStream(filmId: string, archiveId: string): StreamInfo | null {
+  return playbackStream(filmId, archiveId, false);
 }
 
 function scoreFile(file: ArchiveFile) {
@@ -188,8 +225,8 @@ export function pickFromMetadata(archiveId: string, files: ArchiveFile[]): Strea
   };
 }
 
-function cacheKey(filmId: string, archiveId: string) {
-  return `${filmId}::${archiveId}`;
+function cacheKey(filmId: string, archiveId: string, preferMp4 = false) {
+  return `${filmId}::${archiveId}::${preferMp4 ? "mp4" : "fast"}`;
 }
 
 function cacheGet(key: string): StreamInfo | null {
@@ -223,12 +260,13 @@ function cacheSet(key: string, info: StreamInfo) {
 export async function resolveStreamClient(
   archiveId: string,
   filmId = "",
+  preferMp4 = false,
 ): Promise<StreamInfo> {
-  const key = cacheKey(filmId, archiveId);
+  const key = cacheKey(filmId, archiveId, preferMp4);
   const cached = cacheGet(key);
   if (cached) return cached;
 
-  const instant = instantStream(filmId, archiveId);
+  const instant = playbackStream(filmId, archiveId, preferMp4);
   if (instant) {
     cacheSet(key, instant);
     return instant;
@@ -244,16 +282,21 @@ export async function resolveStreamClient(
 }
 
 export function prefetchStream(archiveId: string, filmId = "") {
-  if (instantStream(filmId, archiveId) || cacheGet(cacheKey(filmId, archiveId))) return;
-  void resolveStreamClient(archiveId, filmId).catch(() => undefined);
+  const prefer = devicePrefersMp4();
+  if (playbackStream(filmId, archiveId, prefer) || cacheGet(cacheKey(filmId, archiveId, prefer))) return;
+  void resolveStreamClient(archiveId, filmId, prefer).catch(() => undefined);
 }
 
 export const resolveStream = createServerFn({ method: "GET" })
-  .validator((data: { archiveId: string; filmId?: string }) => {
+  .validator((data: { archiveId: string; filmId?: string; preferMp4?: boolean }) => {
     const archiveId = data.archiveId.trim();
     if (!archiveId) throw new Error("Archivo no válido");
-    return { archiveId, filmId: data.filmId?.trim() ?? "" };
+    return {
+      archiveId,
+      filmId: data.filmId?.trim() ?? "",
+      preferMp4: Boolean(data.preferMp4),
+    };
   })
   .handler(async ({ data }): Promise<StreamInfo> => {
-    return resolveStreamClient(data.archiveId, data.filmId);
+    return resolveStreamClient(data.archiveId, data.filmId, data.preferMp4);
   });
